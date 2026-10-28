@@ -87,9 +87,12 @@
   .also a:hover { color: var(--text); text-decoration: underline; }
   .empty { padding: 40px 0; color: var(--muted); }
 
-  aside section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
-  aside h2 { margin: 0 0 10px; font: 500 14px var(--sans); }
-  aside p.note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+  aside section, .cve-row section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  aside h2, .cve-row h2 { margin: 0 0 10px; font: 500 14px var(--sans); }
+  aside p.note, .cve-row p.note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+  .cve-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+  .cve-row section { margin-bottom: 0; min-width: 0; }
+  @media (max-width: 900px) { .cve-row { grid-template-columns: 1fr; } }
 
 
   .kev { list-style: none; margin: 0; padding: 0; }
@@ -131,13 +134,7 @@
 
   <div class="chips" id="chips" aria-label="Sources"></div>
 
-  <div class="layout">
-    <main class="feed" id="feed" aria-live="polite">
-      <div class="empty">Pulling from sources…</div>
-    </main>
-
-    <aside>
-
+  <div class="cve-row">
       <section>
         <h2>CISA KEV: latest additions</h2>
         <ul class="kev" id="kev"><li class="sm">Loading…</li></ul>
@@ -148,6 +145,15 @@
         <ul class="kev" id="trend"><li class="sm">Loading…</li></ul>
         <p class="note">Ranked by cvemon "hype score", a measure of social-media buzz. Trending is not the same as exploited.</p>
       </section>
+  </div>
+
+  <div class="layout">
+    <main class="feed" id="feed" aria-live="polite">
+      <div class="empty">Pulling from sources…</div>
+    </main>
+
+    <aside>
+
 
       <section>
         <h2>Channel status</h2>
