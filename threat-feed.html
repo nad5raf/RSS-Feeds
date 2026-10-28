@@ -463,7 +463,6 @@ function renderCves() {
   const prio = { both: 0, kev: 1, trend: 2 };
   list.sort((a, b) => (prio[cveKind(a)] - prio[cveKind(b)]) ||
     (cveKind(a) === "kev" ? b.kev.dateAdded.localeCompare(a.kev.dateAdded) : a.trend.rank - b.trend.rank));
-  list = list.slice(0, 15);
 
   const ul = $("cves");
   if (!list.length) {
