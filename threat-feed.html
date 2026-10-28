@@ -92,9 +92,16 @@
   aside p.note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
 
 
-  .tabs { display: flex; width: 100%; margin-bottom: 12px; }
-  .tabs button { flex: 1; }
-  [hidden] { display: none !important; }
+  .cvelist { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow-y: auto; }
+  .cvelist li { border-left: 3px solid var(--c, var(--line)); padding: 6px 0 6px 10px; margin-bottom: 8px; font-size: 13px; }
+  .cvelist a { font: 500 12.5px var(--mono); }
+  .cvelist a:hover { text-decoration: underline; }
+  .cvelist .tags2 { margin: 3px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .cvetag { font: 500 11px var(--mono); padding: 0 6px; border-radius: 4px; border: 1px solid var(--c); color: var(--c); }
+  .cvelist .nm { display: block; color: var(--text); }
+  .cvelist .sm { color: var(--muted); font-size: 12px; }
+  .cvelist .clamp { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #cveChips { margin-bottom: 10px; }
   .kev { list-style: none; margin: 0; padding: 0; }
   .kev li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
   .kev li:first-child { border-top: 0; padding-top: 0; }
@@ -142,19 +149,10 @@
     <aside>
 
       <section>
-        <div class="seg tabs" role="group" aria-label="CVE lists">
-          <button type="button" id="tabKev" aria-pressed="true">CISA KEV</button>
-          <button type="button" id="tabTrend" aria-pressed="false">Trending CVEs</button>
-        </div>
-        <div id="panelKev">
-          <h2>Latest additions</h2>
-          <ul class="kev" id="kev"><li class="sm">Loading…</li></ul>
-        </div>
-        <div id="panelTrend" hidden>
-          <h2>Trending now</h2>
-          <ul class="kev" id="trend"><li class="sm">Loading…</li></ul>
-          <p class="note">Ranked by cvemon "hype score", a measure of social-media buzz. Trending is not the same as exploited.</p>
-        </div>
+        <h2>CVE watch</h2>
+        <div class="chips" id="cveChips" aria-label="CVE lists"></div>
+        <ul class="cvelist" id="cves"><li class="sm">Loading…</li></ul>
+        <p class="note">Amber = on CISA's Known Exploited list. Pink = trending on social media (cvemon hype score). Red = both. Trending alone does not mean exploited. The search box above filters this list too.</p>
       </section>
 
 
@@ -403,51 +401,89 @@ function renderStatus() {
   }));
 }
 
-/* ---------- KEV ---------- */
-async function loadKev() {
-  const ul = $("kev");
+/* ---------- CVE watch: CISA KEV + trending, merged ---------- */
+const CVE_TYPES = {
+  kev:   { label: "CISA KEV", color: "#f2b84b" },
+  trend: { label: "Trending", color: "#f08fb0" },
+  both:  { color: "#e5675f" }
+};
+state.cves = [];
+state.cveOn = new Set(["kev", "trend"]);
+state.cveErr = {};
+
+async function loadCves() {
+  const L = await (localP || loadLocal());
+  const map = new Map();
+  state.cveErr = {};
   try {
-    const L = await (localP || loadLocal());
-    let list;
-    if (L && L.kev && L.kev.length) list = L.kev.slice(0, 8);
+    let kev;
+    if (L && L.kev && L.kev.length) kev = L.kev;
     else {
       const data = JSON.parse(await fetchText(KEV_URL));
-      list = (data.vulnerabilities || []).slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 8);
+      kev = (data.vulnerabilities || []).slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 25);
     }
-    ul.replaceChildren(...list.map(v => el("li", {},
-      el("a", { href: "https://nvd.nist.gov/vuln/detail/" + encodeURIComponent(v.cveID), target: "_blank", rel: "noopener noreferrer" }, v.cveID),
-      el("span", { class: "nm" }, `${v.vendorProject} ${v.product}`),
-      el("span", { class: "sm" }, `Added ${v.dateAdded}`,
-        v.knownRansomwareCampaignUse === "Known" ? el("span", { class: "ransom" }, " · ransomware use") : null))));
-  } catch (e) {
-    ul.replaceChildren(el("li", { class: "sm" }, "Could not load the KEV catalog (" + e.message + ")."));
-  }
-}
-
-/* ---------- Trending CVEs ---------- */
-async function loadTrending() {
-  const ul = $("trend");
+    for (const v of kev) map.set(v.cveID.toUpperCase(), { id: v.cveID, kev: v, trend: null });
+  } catch (e) { state.cveErr.kev = e.message; }
   try {
-    const L = await (localP || loadLocal());
-    let list;
-    if (L && L.trending && L.trending.length) list = L.trending.slice(0, 10);
+    let tr;
+    if (L && L.trending && L.trending.length) tr = L.trending;
     else {
       const doc = new DOMParser().parseFromString(await fetchText(TRENDING_URL), "application/xml");
       if (doc.querySelector("parsererror")) throw new Error("Not valid XML");
       const tx = (n, t) => { const x = n.getElementsByTagName(t)[0]; return x ? x.textContent.trim() : ""; };
-      list = [...doc.querySelectorAll("item")].map((n, i) => ({
+      tr = [...doc.querySelectorAll("item")].map((n, i) => ({
         cveID: tx(n, "title"), rank: +tx(n, "intruder:rank") || i + 1, hype: +tx(n, "intruder:hypeScore") || 0,
         desc: textOf(tx(n, "description")).replace(/^Currently trending CVE - Hype Score: \d+ - /, "").slice(0, 300),
         link: safeUrl(tx(n, "link"))
-      })).sort((a, b) => a.rank - b.rank).slice(0, 10);
+      }));
     }
-    ul.replaceChildren(...list.map(v => el("li", {},
-      el("a", { href: safeUrl(v.link), target: "_blank", rel: "noopener noreferrer" }, `#${v.rank} ${v.cveID}`),
-      el("span", { class: "sm" }, ` · hype ${v.hype}`),
-      el("span", { class: "nm", style: "color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" }, v.desc))));
-  } catch (e) {
-    ul.replaceChildren(el("li", { class: "sm" }, "Could not load trending CVEs (" + e.message + ")."));
+    for (const t of tr) {
+      const k = t.cveID.toUpperCase();
+      const cur = map.get(k) || { id: t.cveID, kev: null, trend: null };
+      cur.trend = t; map.set(k, cur);
+    }
+  } catch (e) { state.cveErr.trend = e.message; }
+  state.cves = [...map.values()];
+  renderCves();
+}
+
+function cveKind(c) { return c.kev && c.trend ? "both" : c.kev ? "kev" : "trend"; }
+
+function renderCves() {
+  const total = { kev: state.cves.filter(c => c.kev).length, trend: state.cves.filter(c => c.trend).length };
+  $("cveChips").replaceChildren(...["kev", "trend"].map(t => el("button", {
+    class: "chip", type: "button", "aria-pressed": String(state.cveOn.has(t)),
+    onclick: () => { state.cveOn.has(t) ? state.cveOn.delete(t) : state.cveOn.add(t); renderCves(); } },
+    el("span", { class: "dot", style: `--c:${CVE_TYPES[t].color}` }), `${CVE_TYPES[t].label} (${total[t]})`)));
+
+  const q = state.q.toLowerCase();
+  let list = state.cves.filter(c => (c.kev && state.cveOn.has("kev")) || (c.trend && state.cveOn.has("trend")));
+  if (q) list = list.filter(c => [c.id, c.kev && c.kev.vendorProject, c.kev && c.kev.product, c.kev && c.kev.vulnerabilityName,
+    c.trend && c.trend.desc].join(" ").toLowerCase().includes(q));
+  const prio = { both: 0, kev: 1, trend: 2 };
+  list.sort((a, b) => (prio[cveKind(a)] - prio[cveKind(b)]) ||
+    (cveKind(a) === "kev" ? b.kev.dateAdded.localeCompare(a.kev.dateAdded) : a.trend.rank - b.trend.rank));
+  list = list.slice(0, 15);
+
+  const ul = $("cves");
+  if (!list.length) {
+    const errs = Object.entries(state.cveErr).map(([k, v]) => `${CVE_TYPES[k].label}: ${v}`).join("; ");
+    ul.replaceChildren(el("li", { class: "sm", style: "border-left:0;padding-left:0" }, errs ? "Could not load (" + errs + ")." : "No CVEs match the current filters."));
+    return;
   }
+  ul.replaceChildren(...list.map(c => {
+    const kind = cveKind(c);
+    const link = c.kev ? "https://nvd.nist.gov/vuln/detail/" + encodeURIComponent(c.id) : safeUrl(c.trend.link);
+    const tags = el("div", { class: "tags2" },
+      c.kev ? el("span", { class: "cvetag", style: `--c:${CVE_TYPES.kev.color}` }, "KEV") : null,
+      c.trend ? el("span", { class: "cvetag", style: `--c:${CVE_TYPES.trend.color}` }, `Trending #${c.trend.rank} · hype ${c.trend.hype}`) : null,
+      c.kev && c.kev.knownRansomwareCampaignUse === "Known" ? el("span", { class: "cvetag", style: "--c:var(--bad)" }, "ransomware") : null);
+    return el("li", { style: `--c:${CVE_TYPES[kind].color}` },
+      el("a", { href: link, target: "_blank", rel: "noopener noreferrer" }, c.id), tags,
+      c.kev ? el("span", { class: "nm" }, `${c.kev.vendorProject} ${c.kev.product}`) : null,
+      c.kev ? el("span", { class: "sm" }, `Added ${c.kev.dateAdded}`) : null,
+      !c.kev && c.trend ? el("span", { class: "clamp" }, c.trend.desc) : null);
+  }));
 }
 
 /* ---------- Load cycle ---------- */
@@ -503,24 +539,12 @@ async function loadAll() {
 /* ---------- Wiring ---------- */
 $("sortNew").onclick = () => { state.sort = "new"; $("sortNew").setAttribute("aria-pressed", "true"); $("sortSrc").setAttribute("aria-pressed", "false"); renderFeed(); };
 $("sortSrc").onclick = () => { state.sort = "src"; $("sortSrc").setAttribute("aria-pressed", "true"); $("sortNew").setAttribute("aria-pressed", "false"); renderFeed(); };
-$("q").addEventListener("input", e => { state.q = e.target.value.trim(); renderFeed(); });
-$("refresh").onclick = () => { loadAll(); loadKev(); loadTrending(); };
-
-function showTab(which) {
-  const kev = which !== "trend";
-  $("panelKev").hidden = !kev;
-  $("panelTrend").hidden = kev;
-  $("tabKev").setAttribute("aria-pressed", String(kev));
-  $("tabTrend").setAttribute("aria-pressed", String(!kev));
-  try { localStorage.setItem("tf.cveTab", kev ? "kev" : "trend"); } catch {}
-}
-$("tabKev").onclick = () => showTab("kev");
-$("tabTrend").onclick = () => showTab("trend");
-try { showTab(localStorage.getItem("tf.cveTab") || "kev"); } catch { showTab("kev"); }
+$("q").addEventListener("input", e => { state.q = e.target.value.trim(); renderFeed(); renderCves(); });
+$("refresh").onclick = () => { loadAll(); loadCves(); };
 
 renderChips(); renderStatus();
-loadAll(); loadKev(); loadTrending();
-setInterval(() => { loadAll(); loadKev(); loadTrending(); }, REFRESH_MS);
+loadAll(); loadCves();
+setInterval(() => { loadAll(); loadCves(); }, REFRESH_MS);
 </script>
 </body>
 </html>
