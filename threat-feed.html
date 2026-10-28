@@ -341,7 +341,6 @@ function card(g) {
     el("a", { href: lead.link, target: "_blank", rel: "noopener noreferrer" }, lead.title));
   const meta = el("div", { class: "meta" },
     el("span", { class: "src" }, el("span", { class: "dot", style: `--c:${s.color}` }), s.name),
-    s.podcast ? el("span", {}, "podcast") : null,
     el("time", { datetime: new Date(lead.ts).toISOString() }, ago(lead.ts)));
   const c = el("article", { class: "item", style: `--c:${s.color}` }, h, meta,
     lead.desc ? el("p", { class: "desc" }, lead.desc) : null);
