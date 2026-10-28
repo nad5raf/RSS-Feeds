@@ -144,6 +144,12 @@
       </section>
 
       <section>
+        <h2>Trending CVEs</h2>
+        <ul class="kev" id="trend"><li class="sm">Loading…</li></ul>
+        <p class="note">Ranked by cvemon "hype score", a measure of social-media buzz. Trending is not the same as exploited.</p>
+      </section>
+
+      <section>
         <h2>Channel status</h2>
         <ul class="status" id="status"></ul>
       </section>
@@ -163,6 +169,7 @@ const SOURCES = [
   { id: "dark",     name: "Dark Reading",     url: "https://www.darkreading.com/rss.xml",         color: "#b48cf2" },
   { id: "thn",      name: "The Hacker News",  url: "https://feeds.feedburner.com/TheHackersNews", color: "#f2b84b" }
 ];
+const TRENDING_URL = "https://cvemon.intruder.io/rss/cvetrends/latest";
 const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 const KEEP_DAYS = 7;
 const REFRESH_MS = 30 * 60 * 1000;
@@ -408,6 +415,32 @@ async function loadKev() {
   }
 }
 
+/* ---------- Trending CVEs ---------- */
+async function loadTrending() {
+  const ul = $("trend");
+  try {
+    const L = await (localP || loadLocal());
+    let list;
+    if (L && L.trending && L.trending.length) list = L.trending.slice(0, 10);
+    else {
+      const doc = new DOMParser().parseFromString(await fetchText(TRENDING_URL), "application/xml");
+      if (doc.querySelector("parsererror")) throw new Error("Not valid XML");
+      const tx = (n, t) => { const x = n.getElementsByTagName(t)[0]; return x ? x.textContent.trim() : ""; };
+      list = [...doc.querySelectorAll("item")].map((n, i) => ({
+        cveID: tx(n, "title"), rank: +tx(n, "intruder:rank") || i + 1, hype: +tx(n, "intruder:hypeScore") || 0,
+        desc: textOf(tx(n, "description")).replace(/^Currently trending CVE - Hype Score: \d+ - /, "").slice(0, 300),
+        link: safeUrl(tx(n, "link"))
+      })).sort((a, b) => a.rank - b.rank).slice(0, 10);
+    }
+    ul.replaceChildren(...list.map(v => el("li", {},
+      el("a", { href: safeUrl(v.link), target: "_blank", rel: "noopener noreferrer" }, `#${v.rank} ${v.cveID}`),
+      el("span", { class: "sm" }, ` · hype ${v.hype}`),
+      el("span", { class: "nm", style: "color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" }, v.desc))));
+  } catch (e) {
+    ul.replaceChildren(el("li", { class: "sm" }, "Could not load trending CVEs (" + e.message + ")."));
+  }
+}
+
 /* ---------- Load cycle ---------- */
 let loading = false;
 async function loadAll() {
@@ -462,11 +495,11 @@ async function loadAll() {
 $("sortNew").onclick = () => { state.sort = "new"; $("sortNew").setAttribute("aria-pressed", "true"); $("sortSrc").setAttribute("aria-pressed", "false"); renderFeed(); };
 $("sortSrc").onclick = () => { state.sort = "src"; $("sortSrc").setAttribute("aria-pressed", "true"); $("sortNew").setAttribute("aria-pressed", "false"); renderFeed(); };
 $("q").addEventListener("input", e => { state.q = e.target.value.trim(); renderFeed(); });
-$("refresh").onclick = () => { loadAll(); loadKev(); };
+$("refresh").onclick = () => { loadAll(); loadKev(); loadTrending(); };
 
 renderChips(); renderStatus();
-loadAll(); loadKev();
-setInterval(() => { loadAll(); loadKev(); }, REFRESH_MS);
+loadAll(); loadKev(); loadTrending();
+setInterval(() => { loadAll(); loadKev(); loadTrending(); }, REFRESH_MS);
 </script>
 </body>
 </html>
