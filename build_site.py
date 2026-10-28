@@ -20,12 +20,6 @@ from xml.sax.saxutils import escape
 
 SOURCES = [  # (id, display name, feed URL)
     ("bleeping",  "BleepingComputer",  "https://www.bleepingcomputer.com/feed/"),
-    ("thn",       "The Hacker News",   "https://feeds.feedburner.com/TheHackersNews"),
-    ("dark",      "Dark Reading",      "https://www.darkreading.com/rss.xml"),
-    ("krebs",     "Krebs on Security", "https://krebsonsecurity.com/feed/"),
-    ("register",  "The Register",      "https://www.theregister.com/security/headlines.atom"),
-    ("risky",     "Risky Business",    "https://risky.biz/feeds/risky-business/"),
-    ("cyberwire", "CyberWire Daily",   "https://thecyberwire.com/feeds/rss.xml"),
 ]
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 KEEP_DAYS = 7
@@ -126,7 +120,7 @@ def build(data):
     items = items[:MAX_ITEMS]
 
     OUT.mkdir(exist_ok=True)
-    rss(SITE_TITLE, "Combined cybersecurity news from the sources listed on the site.", "feed.xml", items)
+    rss(SITE_TITLE, "Cybersecurity news from BleepingComputer.", "feed.xml", items)
 
     kev_items = []
     for v in data["kev"]:
