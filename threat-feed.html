@@ -92,6 +92,14 @@
   aside p.note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
 
 
+  .kev { list-style: none; margin: 0; padding: 0; }
+  .kev li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .kev li:first-child { border-top: 0; padding-top: 0; }
+  .kev a { font: 500 12.5px var(--mono); color: var(--star); }
+  .kev a:hover { text-decoration: underline; }
+  .kev .nm { display: block; color: var(--text); }
+  .kev .sm { color: var(--muted); font-size: 12px; }
+  .kev .ransom { color: var(--bad); }
   .status { list-style: none; margin: 0; padding: 0; font-size: 13px; }
   .status li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
   .status .n { margin-left: auto; font: 400 12px var(--mono); color: var(--muted); }
@@ -131,6 +139,11 @@
     <aside>
 
       <section>
+        <h2>CISA KEV: latest additions</h2>
+        <ul class="kev" id="kev"><li class="sm">Loading…</li></ul>
+      </section>
+
+      <section>
         <h2>Channel status</h2>
         <ul class="status" id="status"></ul>
       </section>
@@ -146,8 +159,11 @@
 /* ---------- Configuration ---------- */
 // Add, remove or reorder feeds here. type "rss" covers both RSS and Atom.
 const SOURCES = [
-  { id: "bleeping", name: "BleepingComputer", url: "https://www.bleepingcomputer.com/feed/", color: "#4aa3ff" }
+  { id: "bleeping", name: "BleepingComputer", url: "https://www.bleepingcomputer.com/feed/", color: "#4aa3ff" },
+  { id: "dark",     name: "Dark Reading",     url: "https://www.darkreading.com/rss.xml",         color: "#b48cf2" },
+  { id: "thn",      name: "The Hacker News",  url: "https://feeds.feedburner.com/TheHackersNews", color: "#f2b84b" }
 ];
+const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 const KEEP_DAYS = 7;
 const REFRESH_MS = 30 * 60 * 1000;
 const TIMEOUT_MS = 12000;
@@ -371,6 +387,27 @@ function renderStatus() {
   }));
 }
 
+/* ---------- KEV ---------- */
+async function loadKev() {
+  const ul = $("kev");
+  try {
+    const L = await (localP || loadLocal());
+    let list;
+    if (L && L.kev && L.kev.length) list = L.kev.slice(0, 8);
+    else {
+      const data = JSON.parse(await fetchText(KEV_URL));
+      list = (data.vulnerabilities || []).slice().sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 8);
+    }
+    ul.replaceChildren(...list.map(v => el("li", {},
+      el("a", { href: "https://nvd.nist.gov/vuln/detail/" + encodeURIComponent(v.cveID), target: "_blank", rel: "noopener noreferrer" }, v.cveID),
+      el("span", { class: "nm" }, `${v.vendorProject} ${v.product}`),
+      el("span", { class: "sm" }, `Added ${v.dateAdded}`,
+        v.knownRansomwareCampaignUse === "Known" ? el("span", { class: "ransom" }, " · ransomware use") : null))));
+  } catch (e) {
+    ul.replaceChildren(el("li", { class: "sm" }, "Could not load the KEV catalog (" + e.message + ")."));
+  }
+}
+
 /* ---------- Load cycle ---------- */
 let loading = false;
 async function loadAll() {
@@ -425,11 +462,11 @@ async function loadAll() {
 $("sortNew").onclick = () => { state.sort = "new"; $("sortNew").setAttribute("aria-pressed", "true"); $("sortSrc").setAttribute("aria-pressed", "false"); renderFeed(); };
 $("sortSrc").onclick = () => { state.sort = "src"; $("sortSrc").setAttribute("aria-pressed", "true"); $("sortNew").setAttribute("aria-pressed", "false"); renderFeed(); };
 $("q").addEventListener("input", e => { state.q = e.target.value.trim(); renderFeed(); });
-$("refresh").onclick = () => loadAll();
+$("refresh").onclick = () => { loadAll(); loadKev(); };
 
 renderChips(); renderStatus();
-loadAll();
-setInterval(loadAll, REFRESH_MS);
+loadAll(); loadKev();
+setInterval(() => { loadAll(); loadKev(); }, REFRESH_MS);
 </script>
 </body>
 </html>

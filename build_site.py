@@ -5,6 +5,7 @@ Outputs to ./site/:
   index.html      the reader page (from threat-feed.html)
   feeds-data.js   the fetched articles, read by the page
   feed.xml        NEW combined RSS feed of every source, newest first
+  kev.xml         NEW RSS feed of the latest CISA KEV (CVE) additions
 
 Usage:  python3 build_site.py
 Env:    SITE_URL  public base URL, e.g. https://user.github.io/repo/  (used in feed links)
@@ -19,7 +20,10 @@ from xml.sax.saxutils import escape
 
 SOURCES = [  # (id, display name, feed URL)
     ("bleeping",  "BleepingComputer",  "https://www.bleepingcomputer.com/feed/"),
+    ("dark",      "Dark Reading",      "https://www.darkreading.com/rss.xml"),
+    ("thn",       "The Hacker News",   "https://feeds.feedburner.com/TheHackersNews"),
 ]
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 KEEP_DAYS = 7
 MAX_ITEMS = 150
 SITE_TITLE = "Threat Feed"
@@ -65,7 +69,7 @@ def parse(raw, src):
 
 def collect():
     cutoff = (datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)).timestamp() * 1000
-    data = {"generated": int(time.time() * 1000), "sources": {}}
+    data = {"generated": int(time.time() * 1000), "sources": {}, "kev": []}
     for sid, _name, url in SOURCES:
         try:
             items = [i for i in parse(get(url), sid) if i["ts"] >= cutoff]
@@ -74,6 +78,14 @@ def collect():
         except Exception as e:
             data["sources"][sid] = {"ok": False, "error": f"{type(e).__name__}: {e}"[:160]}
             print(f"FAIL  {sid:10} {e}")
+    try:
+        v = json.loads(get(KEV_URL))["vulnerabilities"]
+        v.sort(key=lambda x: x["dateAdded"], reverse=True)
+        keys = ("cveID", "vendorProject", "product", "vulnerabilityName", "shortDescription", "requiredAction", "dueDate", "dateAdded", "knownRansomwareCampaignUse")
+        data["kev"] = [{k: x.get(k) for k in keys} for x in v[:25]]
+        print(f"ok    KEV        {len(data['kev'])} entries")
+    except Exception as e:
+        print(f"FAIL  KEV        {e}")
     return data
 
 def rfc822(ms): return format_datetime(datetime.fromtimestamp(ms / 1000, timezone.utc))
@@ -110,17 +122,26 @@ def build(data):
     items = items[:MAX_ITEMS]
 
     OUT.mkdir(exist_ok=True)
-    rss(SITE_TITLE, "Cybersecurity news from BleepingComputer.", "feed.xml", items)
+    rss(SITE_TITLE, "Combined cybersecurity news from BleepingComputer, Dark Reading and The Hacker News.", "feed.xml", items)
 
-
+    kev_items = []
+    for v in data["kev"]:
+        ts = int(datetime.strptime(v["dateAdded"], "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+        extra = " Known ransomware campaign use." if v.get("knownRansomwareCampaignUse") == "Known" else ""
+        kev_items.append({"title": f"{v['cveID']}: {v['vendorProject']} {v['product']}",
+                          "link": "https://nvd.nist.gov/vuln/detail/" + v["cveID"], "ts": ts, "guid": v["cveID"],
+                          "category": "CISA KEV",
+                          "desc": clean(f"{v.get('vulnerabilityName') or ''}. {v.get('shortDescription') or ''} Action: {v.get('requiredAction') or ''} Due: {v.get('dueDate') or ''}.{extra}")})
+    if kev_items:
+        rss(SITE_TITLE + ": CISA KEV", "Latest additions to the CISA Known Exploited Vulnerabilities catalog.", "kev.xml", kev_items)
 
     (OUT / "feeds-data.js").write_text("window.FEED_DATA = " + json.dumps(data) + ";\n", encoding="utf-8")
 
     page = (HERE / "threat-feed.html").read_text(encoding="utf-8")
     page = page.replace("</head>", '<link rel="alternate" type="application/rss+xml" title="Threat Feed" href="feed.xml">\n'
-                        ''
+                        '<link rel="alternate" type="application/rss+xml" title="CISA KEV" href="kev.xml">\n'
                         '<style>a.btn{font:500 13px var(--sans);color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px}a.btn:hover{background:var(--panel-2)}</style>\n</head>', 1)
-    subs = '<a class="btn" href="feed.xml">Subscribe (RSS)</a>'
+    subs = '<a class="btn" href="feed.xml">RSS: all feeds</a><a class="btn" href="kev.xml">RSS: KEV</a>'
     page = page.replace('<button id="refresh">Refresh</button>', subs + '<button id="refresh">Refresh</button>', 1)
     (OUT / "index.html").write_text(page, encoding="utf-8")
     print(f"wrote {OUT}/ ({len(items)} items in feed.xml)")
