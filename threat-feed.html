@@ -164,7 +164,7 @@
   </div>
 
   <footer>
-    Feeds refresh automatically every 30 minutes while this page is open, and the last 7 days are kept. Not affiliated with any listed source.
+    Feeds refresh automatically every 10 minutes while this page is open, and the last 7 days are kept. Not affiliated with any listed source.
   </footer>
 </div>
 
@@ -179,7 +179,7 @@ const SOURCES = [
 const TRENDING_URL = "https://cvemon.intruder.io/rss/cvetrends/latest";
 const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 const KEEP_DAYS = 7;
-const REFRESH_MS = 30 * 60 * 1000;
+const REFRESH_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 12000;
 
 // Browsers block most cross-site feed requests, so we try a direct fetch first
