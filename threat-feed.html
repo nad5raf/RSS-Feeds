@@ -390,13 +390,17 @@ function renderChips() {
     return b;
   }));
 }
+function newest(id) {
+  const ts = state.items.filter(i => i.src === id).map(i => i.ts);
+  return ts.length ? " · newest " + ago(Math.max(...ts)) : "";
+}
 function renderStatus() {
   $("status").replaceChildren(...SOURCES.map(s => {
     const st = state.status[s.id];
     return el("li", { style: "flex-wrap:wrap" }, el("span", { class: "dot", style: `--c:${!st ? "var(--muted)" : st.ok ? "var(--ok)" : "var(--bad)"}` }),
       s.name,
       el("span", { class: "n" + (st && !st.ok ? " err" : "") },
-        !st ? "…" : st.ok ? st.count + " items" : "failed"),
+        !st ? "…" : st.ok ? st.count + " items" + newest(s.id) : "failed"),
       st && !st.ok ? el("div", { style: "flex-basis:100%;font:400 11px var(--mono);color:var(--muted);padding-left:16px;word-break:break-word" }, st.error) : null);
   }));
 }
@@ -531,7 +535,7 @@ async function loadAll() {
   const ok = Object.values(state.status).filter(s => s.ok).length;
   sync.className = "sync" + (ok ? " live" : "");
   const stamp = new Date(LOCAL ? LOCAL.generated : Date.now()).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  $("syncText").textContent = ok ? `${ok}/${SOURCES.length} feeds · ${LOCAL ? "fetched " : ""}${stamp}` : "Offline";
+  $("syncText").textContent = ok ? `${ok}/${SOURCES.length} feeds · ${LOCAL ? "site built " : ""}${stamp}${LOCAL ? " (" + ago(LOCAL.generated) + ")" : ""}` : "Offline";
   loading = false;
 }
 
